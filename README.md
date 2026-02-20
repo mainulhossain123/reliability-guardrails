@@ -27,7 +27,7 @@ An automated deployment gate that **allows, delays, or blocks** CI/CD pipelines 
 - Single-responsibility policy evaluator
 - Eight prioritised guardrail rules, first-match wins
 - Returns `ALLOW`, `WARN`, `DELAY`, or `BLOCK`
-- CI exit codes: `0` = allow/warn, `1` = delay, `2` = block
+- CI exit codes: `0` = allow/warn/delay (DELAY emits a `::warning::` annotation), `1` = block
 
 ### 🤖 Incident Explainer
 - Human-readable narrative for every deployment decision
@@ -378,7 +378,7 @@ The included GitHub Actions workflow (`.github/workflows/guardrail.yml`) runs on
     PYTHONPATH:   ${{ github.workspace }}
 ```
 
-Exit codes: `0` = allow/warn &nbsp; `1` = delay &nbsp; `2` = block
+Exit codes: `0` = allow/warn/delay (DELAY emits a warning annotation) &nbsp; `1` = block
 
 ---
 

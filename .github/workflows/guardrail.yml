@@ -105,9 +105,8 @@ jobs:
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
           BRANCH_NAME:  ${{ github.ref_name }}
           COMMIT_SHA:   ${{ github.sha }}
-        run: |
-          bash ci/deploy_guard.sh
-          echo "decision=ALLOW" >> "$GITHUB_OUTPUT"
+        run: bash ci/deploy_guard.sh
+        # decision and delay_minutes outputs are written by the script itself
 
       - name: Log decision to audit trail
         if: always()
