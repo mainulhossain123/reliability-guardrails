@@ -1,250 +1,259 @@
-# SLO-Driven Deployment Guardrails with Cost-Aware Reliability Automation
+﻿# SLO-Driven Deployment Guardrails
 
-> Automatically **allows, delays, or blocks** CI/CD deployments based on real-time
-> reliability (SLOs) and cloud cost signals — enforcing SRE best practices with
-> explainable, auditable decisions.
+[![CI Pipeline](https://github.com/mainulhossain123/reliability-guardrails/actions/workflows/guardrail.yml/badge.svg)](https://github.com/mainulhossain123/reliability-guardrails/actions/workflows/guardrail.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+
+An automated deployment gate that **allows, delays, or blocks** CI/CD pipelines based on real-time SLO health and cloud cost signals — with a live web dashboard and full audit trail.
 
 ---
 
-## The Problem
+## Features
 
-| Symptom | Root Cause |
-|---|---|
-| Deployments happen during active incidents | No automated reliability gate |
-| Error budgets silently burn to zero | No real-time SLO awareness in the pipeline |
-| Cloud costs spike before anyone notices | Cost signals ignored at deploy time |
-| Post-incident reviews repeat the same findings | No audit trail of what the system knew |
+### 🛡️ SLO Engine
+- Calculates error budget remaining (30-day rolling window)
+- Classifies burn rate: low / medium / high / critical
+- Evaluates p95 and p99 latency compliance
+- Configurable targets via `config/slos.yaml`
 
-Teams deploy on schedules, not on *system health*. This project changes that.
+### 💰 Cost Collector
+- Week-over-week cloud spend analysis
+- Spike detection with configurable thresholds
+- Trend classification: stable / rising / spiking / falling
+- Pluggable data source (default: `data/cost.json`)
+
+### ⚖️ Decision Engine
+- Single-responsibility policy evaluator
+- Eight prioritised guardrail rules, first-match wins
+- Returns `ALLOW`, `WARN`, `DELAY`, or `BLOCK`
+- CI exit codes: `0` = allow/warn, `1` = delay, `2` = block
+
+### 🤖 Incident Explainer
+- Human-readable narrative for every deployment decision
+- Rule-based by default; LLM-ready via environment variable
+- Supports OpenAI and Anthropic as backend providers
+
+### 📊 Web Dashboard
+- Live dark-mode UI at `http://localhost:5000`
+- Auto-refreshes every 30 seconds
+- Full policy evaluation trace, audit log, and simulate button
+
+### 📁 Audit Trail
+- Every gate evaluation written to JSONL at `data/audit/decisions-YYYY-MM-DD.jsonl`
+- Uploaded as a GitHub Actions artifact (90-day retention)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CI/CD Pipeline                               │
-│                                                                 │
-│   git push ──► Test Suite ──► Deployment Gate                   │
-│                                      │                          │
-│              ┌───────────────────────┤                          │
-│              ▼                       ▼                          │
-│        SLO Engine              Cost Collector                   │
-│              │                       │                          │
-│              └──────────┬────────────┘                          │
-│                         ▼                                       │
-│                  Decision Engine                                │
-│                  (policies.yaml)                                │
-│                         │                                       │
-│          ┌──────────────┼──────────────┐                        │
-│          ▼              ▼              ▼                        │
-│        ALLOW          DELAY          BLOCK                      │
-│                         │              │                        │
-│                         └──────────────►  AI Explainer          │
-│                                            + Audit Log          │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Signal Flow
-
-```
-Service Metrics ──► SLO Engine ──► Error Budget %
-                                   Burn Rate
-                                        │
-Cost Data       ──► Cost Collector ──► WoW Change %    ──► Decision Engine ──► action
-                                   Trend                     (policies.yaml)
+Git Push
+    |
+    v
++-------------------+
+|   Test Suite      |
++-------------------+
+    |
+    v
++-------------------+     +-------------------+
+|   SLO Engine      |     |  Cost Collector   |
+|  (error budget,   |     |  (WoW spend,      |
+|   burn rate,      |     |   spike detect)   |
+|   latency)        |     |                   |
++--------+----------+     +----------+--------+
+         |                           |
+         +----------+----------------+
+                    |
+                    v
+         +--------------------+
+         |  Decision Engine   |
+         |  (policies.yaml)   |
+         +--------------------+
+                    |
+         +----------+----------+
+         |          |          |
+      ALLOW       WARN      DELAY / BLOCK
+                    |
+                    v
+         +--------------------+     +-------------------+
+         |  Incident          |     |  Audit Log        |
+         |  Explainer         |     |  (JSONL)          |
+         +--------------------+     +-------------------+
 ```
 
 ---
 
 ## Quick Start
 
-**Requires:** Docker and Docker Compose
+**Requirements:** Docker and Docker Compose
 
 ```bash
 git clone https://github.com/mainulhossain123/reliability-guardrails.git
 cd reliability-guardrails
 
+# Start the web dashboard
+docker compose up dashboard -d
+# Open http://localhost:5000
+
 # Run the full test suite
 docker compose run --rm test
 
-# View the SLO status report
-docker compose run --rm slo
-
-# View the cost analysis report
-docker compose run --rm cost
-
-# Run the deployment gate (exit 0 = allow, 1 = delay, 2 = block)
-docker compose run --rm decision
-
-# Generate a human-readable incident explanation
-docker compose run --rm explainer
+# One-shot CLI tools
+docker compose run --rm slo        # SLO status report
+docker compose run --rm cost       # Cost analysis report
+docker compose run --rm decision   # Deployment gate
+docker compose run --rm explainer  # Incident narrative
 ```
 
-### Without Docker
+**Without Docker:**
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Linux/macOS
-# .venv\Scripts\activate                            # Windows
-
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-python -m slo.slo_engine          # SLO report
-python -m cost.cost_collector     # Cost report
-python -m decision.decision_engine # Deployment gate
-python -m ai.incident_explainer    # Incident narrative
+python -m slo.slo_engine
+python -m cost.cost_collector
+python -m decision.decision_engine
+python -m ai.incident_explainer
 ```
 
 ---
 
-## Sample Output
+## Dashboard
 
-### Deployment Gate — BLOCK scenario
+The web UI at `http://localhost:5000` shows:
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║         DEPLOYMENT GUARDRAIL — DECISION REPORT              ║
-╠══════════════════════════════════════════════════════════════╣
-║  Decision:    🚫  BLOCK                                      ║
-║  Policy:      [P002] Low error budget with high burn rate    ║
-╠══════════════════════════════════════════════════════════════╣
-║  Reason:                                                     ║
-║    Error budget below 20% with high burn rate               ║
-╠══════════════════════════════════════════════════════════════╣
-║  SLO Signals:                                                ║
-║    Availability      99.9050%                                ║
-║    Error Budget        8.50% remaining                       ║
-║    Burn Rate         CRITICAL                                ║
-║    Latency p95         720 ms (BREACHED)                     ║
-╠══════════════════════════════════════════════════════════════╣
-║  Cost Signals:                                               ║
-║    WoW Change          +35.00%                              ║
-║    Trend             SPIKING                                 ║
-║    Spike             YES ⚠️                                  ║
-╠══════════════════════════════════════════════════════════════╣
-║  Remediation:                                                ║
-║    Hold all deployments. Reduce traffic or roll back.        ║
-╚══════════════════════════════════════════════════════════════╝
-```
+| Panel | Contents |
+|---|---|
+| Decision banner | ALLOW / WARN / DELAY / BLOCK with matched policy and reason |
+| SLO card | Error budget bar, burn rate classification, latency p95/p99 |
+| Cost card | 30-day spend chart, WoW % change, trend label |
+| Policy trace | Each policy evaluated, whether it matched, and why |
+| Explainer | Human-readable narrative generated for the current decision |
+| Audit log | Every gate run in the current session with timestamps |
 
-### Incident Explainer
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║         INCIDENT EXPLAINER — DEPLOYMENT NARRATIVE           ║
-╚══════════════════════════════════════════════════════════════╝
-
-Generated : 2026-02-20T14:32:00 UTC
-Service   : checkout-api
-Decision  : BLOCK
-
-─────────────────────────────────────────────────────────────
-CONTRIBUTING FACTORS
-─────────────────────────────────────────────────────────────
-  1. Error budget is critically exhausted (8.5% remaining).
-  2. Error budget burning at 12.5× the normal rate.
-  3. Cloud costs spiked 35.0% week-over-week.
-
-─────────────────────────────────────────────────────────────
-RECOMMENDED ACTIONS
-─────────────────────────────────────────────────────────────
-  1. Freeze all deployments to this service immediately.
-  2. Investigate recent error logs. Consider rolling back.
-  3. Open a FinOps review ticket for the cost anomaly.
-```
+Click **Run Deployment Gate** to evaluate all signals, write an audit record, and display the result in a modal.
 
 ---
 
-## Repository Structure
+## Service Access Points
 
-```
-reliability-guardrails/
-├── app/                        # Sample Flask microservice
-│   ├── app.py                  # HTTP API with failure injection
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── slo/                        # SLO evaluation engine
-│   └── slo_engine.py           # Error budget & burn rate calculator
-│
-├── cost/                       # FinOps signal generator
-│   └── cost_collector.py       # Week-over-week spend analyser
-│
-├── decision/                   # Deployment gate core
-│   └── decision_engine.py      # Policy evaluator (ALLOW/DELAY/BLOCK)
-│
-├── ai/                         # Human-readable decision narratives
-│   └── incident_explainer.py   # Rule-based + LLM-ready explainer
-│
-├── storage/                    # Audit persistence
-│   └── audit_log.py            # JSONL decision audit trail
-│
-├── utils/                      # Shared utilities
-│   └── logger.py               # Structured logger
-│
-├── config/                     # Policy & SLO definitions
-│   ├── slos.yaml               # SLO targets and thresholds
-│   └── policies.yaml           # Deployment guardrail rules
-│
-├── data/                       # Sample telemetry data
-│   ├── metrics.json            # Service reliability metrics
-│   ├── cost.json               # Historical cloud spend
-│   └── resources.json          # Cloud resource inventory
-│
-├── docker/scenarios/           # Test scenarios
-│   ├── allow/                  # Metrics that produce ALLOW
-│   ├── warn/                   # Metrics that produce WARN/DELAY
-│   └── block/                  # Metrics that produce BLOCK
-│
-├── ci/
-│   └── deploy_guard.sh         # CI/CD bash gate script
-│
-├── .github/workflows/
-│   └── guardrail.yml           # GitHub Actions pipeline
-│
-├── tests/                      # pytest test suite
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-└── .env.example
-```
-
----
-
-## How Decisions Are Made
-
-The Decision Engine evaluates **prioritised policies** from `config/policies.yaml`.
-The first matching policy wins.
-
-| Priority | Condition | Action |
+| Service | URL | Purpose |
 |---|---|---|
-| 1 | Error budget < 10% | **BLOCK** |
-| 2 | Error budget < 20% AND burn rate high/critical | **BLOCK** |
-| 3 | Cost spike ≥ 30% AND burn rate high/critical | **BLOCK** |
-| 4 | Burn rate high/critical | **DELAY** (30 min) |
-| 5 | Error budget < 30% | **DELAY** (15 min) |
-| 6 | Cost spike ≥ 20% | **WARN** |
-| 7 | Latency p95 above target | **DELAY** (20 min) |
-| 99 | (catch-all) | **ALLOW** |
-
-Policies are **fully configurable** — edit `config/policies.yaml` without
-touching any code.
+| Dashboard | http://localhost:5000 | Live web UI |
+| Sample app | http://localhost:8080 | Metrics endpoint |
+| API — SLO | http://localhost:5000/api/slo | SLO engine result |
+| API — Cost | http://localhost:5000/api/cost | Cost analysis result |
+| API — Decision | http://localhost:5000/api/decision | Gate decision |
+| API — All | http://localhost:5000/api/all | Combined payload |
 
 ---
 
-## Configuring SLO Targets
+## Decision Logic
 
-Edit `config/slos.yaml`:
+Policies in `config/policies.yaml` are evaluated top-to-bottom. First match wins.
+
+| ID | Name | Condition | Action |
+|---|---|---|---|
+| P001 | Critical budget exhaustion | Error budget < 10% | BLOCK |
+| P002 | Low budget + high burn | Budget < 20% **and** burn is high or critical | BLOCK |
+| P003 | Cost spike during incident | Cost spike >= 30% **and** burn is high or critical | BLOCK |
+| P004 | High burn rate | Burn rate is high or critical | DELAY 30 min |
+| P005 | Moderate budget consumed | Error budget < 30% | DELAY 15 min |
+| P006 | Significant cost spike | Cost spike >= 20% | WARN |
+| P007 | Latency SLO breach | p95 latency above target | DELAY 20 min |
+| P008 | Catch-all | _(always matches)_ | ALLOW |
+
+All thresholds are editable in `config/policies.yaml` — no code changes required.
+
+---
+
+## API Reference
+
+### SLO Engine
+
+```
+GET /api/slo
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "error_budget_pct": 91.9,
+    "burn_rate_label": "low",
+    "burn_rate_value": 0.25,
+    "latency_ok": true,
+    "p95_ms": 480,
+    "p99_ms": 820,
+    "within_budget": true
+  }
+}
+```
+
+### Cost Collector
+
+```
+GET /api/cost
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "current_week_avg": 58.4,
+    "prior_week_avg": 46.7,
+    "wow_change_pct": 25.1,
+    "trend": "rising",
+    "spike_detected": false
+  }
+}
+```
+
+### Decision Engine
+
+```
+GET  /api/decision
+POST /api/simulate
+```
+
+```json
+{
+  "ok": true,
+  "data": {
+    "action": "WARN",
+    "policy_id": "P006",
+    "policy_name": "Significant cost spike",
+    "reason": "Cloud costs increased significantly week-over-week",
+    "remediation": "Review resource usage and scaling events before proceeding."
+  }
+}
+```
+
+### Full Payload
+
+```
+GET /api/all
+```
+
+Returns SLO, cost, decision, explanation, and audit log combined in a single response.
+
+---
+
+## Configuration
+
+### SLO targets — `config/slos.yaml`
 
 ```yaml
 slos:
   availability:
-    target: 99.9           # Minimum availability %
+    target: 99.9           # minimum availability %
     window_days: 30
-
   latency:
-    p95_threshold_ms: 500  # 95th percentile ceiling
-    window_days: 30
+    p95_threshold_ms: 500
+    p99_threshold_ms: 1000
 
 burn_rate:
   thresholds:
@@ -254,46 +263,9 @@ burn_rate:
     critical: 10.0
 ```
 
----
+### AI Explainer backend
 
-## Plugging in Real Metrics
-
-### Replacing sample data with live Prometheus
-
-```python
-# slo/slo_engine.py — replace _load_json() with a Prometheus query:
-
-from prometheus_api_client import PrometheusConnect
-
-prom = PrometheusConnect(url="http://prometheus:9090")
-
-error_rate = prom.custom_query(
-    'sum(rate(http_requests_total{status=~"5.."}[30d]))'
-    ' / sum(rate(http_requests_total[30d]))'
-)
-```
-
-### Replacing sample cost data with AWS Cost Explorer
-
-```python
-# cost/cost_collector.py — replace _load() with a boto3 call:
-
-import boto3
-
-ce = boto3.client("ce", region_name="us-east-1")
-response = ce.get_cost_and_usage(
-    TimePeriod={"Start": start, "End": end},
-    Granularity="DAILY",
-    Metrics=["UnblendedCost"],
-)
-```
-
----
-
-## Enabling the AI Explainer (LLM Backend)
-
-The explainer defaults to a deterministic rule-based engine.
-To use an LLM, set the environment variable and install the SDK:
+The explainer defaults to rule-based output. To switch to an LLM:
 
 ```bash
 # OpenAI
@@ -307,38 +279,92 @@ export ANTHROPIC_API_KEY=sk-ant-...
 pip install anthropic
 ```
 
-The interface is identical — no callers need to change.
+### Plugging in real metrics
+
+Replace `data/metrics.json` with data from Prometheus or your APM tool:
+
+```json
+{
+  "total_requests": 2592000,
+  "failed_requests": 2100,
+  "p95_latency_ms": 480,
+  "p99_latency_ms": 820,
+  "burn_rates": [0.9, 1.1, 1.4, 2.1, 3.1]
+}
+```
+
+Replace `data/cost.json` with daily cost records from AWS Cost Explorer or your cloud billing API.
 
 ---
 
-## Running Tests
+## Project Structure
+
+```
+reliability-guardrails/
+├── app/                    # Sample Flask microservice with Prometheus metrics
+├── slo/                    # SLO engine: error budget, burn rate, latency
+├── cost/                   # Cost collector: WoW analysis, spike detection
+├── decision/               # Decision engine: policy evaluator
+├── ai/                     # Incident explainer: rule-based + LLM-ready
+├── storage/                # Audit log: append-only JSONL
+├── dashboard/              # Web dashboard: Flask backend + dark-mode UI
+├── config/
+│   ├── slos.yaml           # SLO targets and burn rate thresholds
+│   └── policies.yaml       # Guardrail policy rules
+├── data/
+│   ├── metrics.json        # Sample service metrics (replace with real data)
+│   ├── cost.json           # Sample cost records (replace with real data)
+│   ├── resources.json      # Sample resource inventory
+│   └── audit/              # JSONL audit log output
+├── tests/                  # pytest suite — 80 tests across 6 files
+├── ci/
+│   └── deploy_guard.sh     # Bash gate script for any CI pipeline
+├── .github/
+│   └── workflows/
+│       └── guardrail.yml   # GitHub Actions pipeline
+├── docker-compose.yml      # All services: app, slo, cost, decision, dashboard, test
+└── Dockerfile              # Shared Python 3.12 image
+```
+
+---
+
+## Testing
 
 ```bash
-# All tests
-pytest tests/ -v
+# Run all 80 tests via Docker (no local Python required)
+docker compose run --rm test
 
-# With coverage
-pytest tests/ --cov=slo --cov=cost --cov=decision --cov=ai --cov=storage \
-       --cov-report=term-missing
+# Run locally
+pytest tests/ -v --tb=short
 
-# Specific module
-pytest tests/test_decision_engine.py -v
+# Run with coverage
+pytest tests/ \
+  --cov=slo --cov=cost --cov=decision --cov=ai --cov=storage \
+  --cov-report=term-missing
 ```
+
+| Test File | Coverage |
+|---|---|
+| `test_slo_engine.py` | Error budget, burn rate, latency, edge cases |
+| `test_cost_collector.py` | WoW calculation, spike detection, trend labels |
+| `test_decision_engine.py` | All 8 policies, priority ordering, exit codes |
+| `test_incident_explainer.py` | Rule-based narratives, all decision types |
+| `test_audit_log.py` | JSONL write, read, daily rotation |
+| `test_app.py` | Sample Flask app endpoints |
 
 ---
 
 ## CI/CD Integration
 
-The GitHub Actions workflow (`.github/workflows/guardrail.yml`) runs on every
-push to `main` and `release/**`:
+The included GitHub Actions workflow (`.github/workflows/guardrail.yml`) runs on every push to `main` or `release/**`:
 
-1. **Test Suite** — runs the full pytest suite
-2. **SLO Report** — prints current reliability signals
-3. **Deployment Gate** — evaluates policies; fails the pipeline if BLOCK
-4. **Incident Explainer** — runs only when the gate fires (BLOCK)
-5. **Audit Log** — uploaded as a GitHub Actions artifact (90-day retention)
+1. **Test suite** — pytest with coverage uploaded to Codecov
+2. **SLO report** — prints current error budget and cost signals to the job log
+3. **Deployment gate** — fails the job on BLOCK (exit `2`) or DELAY (exit `1`)
+4. **Incident explainer** — generates a narrative when the gate blocks
+5. **Audit upload** — uploads `data/audit/` as a workflow artifact (90-day retention)
 
-### Integrating into an existing workflow
+### Adding the gate to an existing pipeline
 
 ```yaml
 - name: Reliability guardrail check
@@ -349,35 +375,56 @@ push to `main` and `release/**`:
     SERVICE_NAME: my-service
     BRANCH_NAME:  ${{ github.ref_name }}
     COMMIT_SHA:   ${{ github.sha }}
+    PYTHONPATH:   ${{ github.workspace }}
 ```
 
-Exit codes: `0` = proceed, `1` = delay, `2` = block (fails the job).
+Exit codes: `0` = allow/warn &nbsp; `1` = delay &nbsp; `2` = block
 
 ---
 
-## What I'd Add in Production
+## Development
 
-| Enhancement | Why |
-|---|---|
-| Live Prometheus / Datadog integration | Replace simulated metrics with real SLIs |
-| Multi-window burn rate (1h / 6h / 72h) | Google SRE-style alerting precision |
-| Canary awareness | Different thresholds for canary vs. full rollout |
-| Slack / PagerDuty notifications | Immediate human awareness on BLOCK |
-| Postmortem auto-draft | SRE maturity — structured incident context |
-| Multi-service policies | Cascade-aware deployment ordering |
-| Terraform provider integration | GitOps-native infrastructure guardrails |
+### Local setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+### Running individual modules
+
+```bash
+python -m slo.slo_engine            # Print SLO report
+python -m cost.cost_collector       # Print cost report
+python -m decision.decision_engine  # Run deployment gate
+python -m ai.incident_explainer     # Generate incident narrative
+python -m dashboard.app             # Start web dashboard on :5000
+```
+
+### Docker services
+
+| Service | Command | Description |
+|---|---|---|
+| `app` | `docker compose up app` | Sample microservice on port 8080 |
+| `dashboard` | `docker compose up dashboard -d` | Web UI on port 5000 |
+| `slo` | `docker compose run --rm slo` | One-shot SLO report |
+| `cost` | `docker compose run --rm cost` | One-shot cost report |
+| `decision` | `docker compose run --rm decision` | One-shot gate evaluation |
+| `explainer` | `docker compose run --rm explainer` | One-shot incident narrative |
+| `test` | `docker compose run --rm test` | Full test suite |
 
 ---
 
-## Resume Bullet
+## Contributing
 
-> Designed a production-grade SLO-driven, cost-aware deployment guardrail system
-> that automatically blocked or delayed CI/CD deployments based on real-time
-> reliability and FinOps signals, enforcing SRE best practices and reducing
-> simulated incident risk during high error-budget burn periods.
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -m 'feat: add your feature'`
+4. Push and open a Pull Request
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE) for details.
