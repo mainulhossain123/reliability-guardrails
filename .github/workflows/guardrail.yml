@@ -1,0 +1,153 @@
+name: Reliability Guardrails — Deployment Gate
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SERVICE_NAME: checkout-api
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  # ── Unit & Integration Tests ──────────────────────────────────────────────
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v \
+            --tb=short \
+            --no-header \
+            --cov=slo \
+            --cov=cost \
+            --cov=decision \
+            --cov=ai \
+            --cov=storage \
+            --cov-report=term-missing \
+            --cov-report=xml
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+  # ── SLO Report ────────────────────────────────────────────────────────────
+  slo-report:
+    name: SLO Status Report
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Print SLO status
+        run: python -m slo.slo_engine
+
+      - name: Print cost signals
+        run: python -m cost.cost_collector
+
+  # ── Deployment Gate ───────────────────────────────────────────────────────
+  deployment-gate:
+    name: Deployment Gate
+    runs-on: ubuntu-latest
+    needs: [test, slo-report]
+
+    # Only block actual deploys on pushes to main/release branches
+    if: >
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run deployment guardrail
+        id: guardrail
+        env:
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          BRANCH_NAME:  ${{ github.ref_name }}
+          COMMIT_SHA:   ${{ github.sha }}
+        run: |
+          bash ci/deploy_guard.sh
+          echo "decision=ALLOW" >> "$GITHUB_OUTPUT"
+
+      - name: Log decision to audit trail
+        if: always()
+        run: |
+          python -c "
+          from decision.decision_engine import DecisionEngine
+          from storage.audit_log import AuditLog
+          result = DecisionEngine().evaluate()
+          path   = AuditLog().write(result)
+          print(f'Audit record written to: {path}')
+          print(f'Decision: {result.action}')
+          "
+
+      - name: Upload audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-log-${{ github.run_id }}
+          path: data/audit/
+          retention-days: 90
+
+  # ── Incident Explainer (only on BLOCK) ───────────────────────────────────
+  incident-explainer:
+    name: Incident Explainer
+    runs-on: ubuntu-latest
+    needs: deployment-gate
+    if: failure()
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate incident explanation
+        run: python -m ai.incident_explainer

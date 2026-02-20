@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reliability Guardrails — Dashboard</title>
+  <style>
+    /* ── Reset & base ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d26;
+      --surface2:  #22263a;
+      --border:    #2d3148;
+      --text:      #e2e8f0;
+      --muted:     #8892aa;
+      --allow:     #22c55e;
+      --allow-bg:  #052e16;
+      --warn:      #facc15;
+      --warn-bg:   #1c1700;
+      --delay:     #fb923c;
+      --delay-bg:  #1c0a00;
+      --block:     #ef4444;
+      --block-bg:  #1c0404;
+      --blue:      #60a5fa;
+      --purple:    #a78bfa;
+      --teal:      #2dd4bf;
+      --font:      'Inter', system-ui, -apple-system, sans-serif;
+      --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --radius:    12px;
+      --shadow:    0 4px 24px rgba(0,0,0,0.4);
+    }
+
+    html { font-size: 15px; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+
+    /* ── Typography ────────────────────────────────────────────────── */
+    h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    h2 { font-size: 1.1rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; }
+    h3 { font-size: 1rem; font-weight: 600; }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 2rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 0.75rem; }
+    .header-left .logo { font-size: 1.5rem; }
+    .header-left .subtitle { color: var(--muted); font-size: 0.85rem; margin-top: 0.1rem; }
+
+    .header-right { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+    .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem 1.5rem 3rem; }
+
+    /* ── Cards grid ─────────────────────────────────────────────────── */
+    .grid-top {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+    .grid-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 1100px) { .grid-top { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 700px)  { .grid-top, .grid-bottom { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+
+    /* ── Decision card ──────────────────────────────────────────────── */
+    .decision-card {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      padding: 1.25rem 1.75rem;
+      border-width: 2px;
+      transition: border-color 0.4s, background 0.4s;
+    }
+
+    .decision-card.ALLOW  { border-color: var(--allow);  background: color-mix(in srgb, var(--allow-bg) 80%, var(--surface)); }
+    .decision-card.WARN   { border-color: var(--warn);   background: color-mix(in srgb, var(--warn-bg)  80%, var(--surface)); }
+    .decision-card.DELAY  { border-color: var(--delay);  background: color-mix(in srgb, var(--delay-bg) 80%, var(--surface)); }
+    .decision-card.BLOCK  { border-color: var(--block);  background: color-mix(in srgb, var(--block-bg) 80%, var(--surface)); }
+
+    .decision-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .decision-icon { font-size: 2.5rem; line-height: 1; }
+
+    .decision-action {
+      font-size: 2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    .decision-action.ALLOW { color: var(--allow); }
+    .decision-action.WARN  { color: var(--warn);  }
+    .decision-action.DELAY { color: var(--delay); }
+    .decision-action.BLOCK { color: var(--block); }
+
+    .decision-meta { flex: 1; min-width: 200px; }
+    .decision-policy { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; font-family: var(--mono); }
+    .decision-reason { font-size: 0.95rem; color: var(--text); }
+    .decision-remediation { font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem; }
+
+    /* ── Stat rows ──────────────────────────────────────────────────── */
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid var(--border);
+      gap: 0.5rem;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--muted); font-size: 0.85rem; white-space: nowrap; }
+    .stat-value { font-size: 0.95rem; font-weight: 600; font-family: var(--mono); text-align: right; }
+
+    /* ── Status badges ──────────────────────────────────────────────── */
+    .badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-family: var(--mono);
+    }
+    .badge-green  { background: #052e16; color: var(--allow); }
+    .badge-yellow { background: #1c1700; color: var(--warn);  }
+    .badge-orange { background: #1c0a00; color: var(--delay); }
+    .badge-red    { background: #1c0404; color: var(--block); }
+    .badge-blue   { background: #0c1a2e; color: var(--blue);  }
+
+    /* ── Budget bar ─────────────────────────────────────────────────── */
+    .budget-bar-wrap { display: flex; align-items: center; gap: 0.75rem; }
+    .budget-bar-track {
+      flex: 1;
+      height: 8px;
+      background: var(--surface2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .budget-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.6s ease;
+    }
+    .budget-pct { font-family: var(--mono); font-size: 0.85rem; white-space: nowrap; min-width: 48px; text-align: right; }
+
+    /* ── Burn rate sparkline ────────────────────────────────────────── */
+    .sparkline-wrap { margin-top: 0.75rem; }
+    #burnChart { width: 100%; height: 80px; display: block; }
+
+    /* ── Cost trend bar ─────────────────────────────────────────────── */
+    .cost-bars { margin-top: 0.75rem; display: flex; align-items: flex-end; gap: 3px; height: 60px; }
+    .cost-bar {
+      flex: 1;
+      background: var(--blue);
+      border-radius: 3px 3px 0 0;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+      min-width: 4px;
+    }
+    .cost-bar:hover { opacity: 1; }
+    .cost-bar.spike { background: var(--block); opacity: 0.9; }
+
+    /* ── Explanation ────────────────────────────────────────────────── */
+    .explanation-text {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      max-height: 420px;
+      overflow-y: auto;
+      color: var(--text);
+    }
+
+    /* ── Audit table ────────────────────────────────────────────────── */
+    .audit-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { color: var(--muted); text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.72rem; }
+    td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); font-family: var(--mono); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+    .audit-empty { text-align: center; padding: 2rem; color: var(--muted); font-family: var(--font); }
+
+    /* ── Buttons ────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary  { background: var(--blue);  color: #fff; }
+    .btn-danger   { background: var(--block); color: #fff; }
+    .btn-ghost    { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Refresh indicator ──────────────────────────────────────────── */
+    .refresh-info { font-size: 0.78rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--allow); animation: pulse 2s infinite; }
+    .dot.loading { background: var(--warn); animation: none; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* ── Loading / error states ─────────────────────────────────────── */
+    .loading-overlay {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Policies list ──────────────────────────────────────────────── */
+    .policy-list { display: flex; flex-direction: column; gap: 0.4rem; }
+    .policy-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      gap: 0.5rem;
+    }
+    .policy-item.matched { border-color: var(--blue); background: #0c1a2e; }
+    .policy-item-name { font-family: var(--mono); color: var(--muted); flex: 1; }
+    .policy-item.matched .policy-item-name { color: var(--blue); }
+
+    /* ── Misc ───────────────────────────────────────────────────────── */
+    .section-meta { font-size: 0.78rem; color: var(--muted); margin-top: -0.5rem; margin-bottom: 1rem; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+    .tag { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); background: var(--surface2); padding: 0.1rem 0.4rem; border-radius: 4px; }
+    .wow-positive { color: var(--block); }
+    .wow-negative { color: var(--allow); }
+    .wow-neutral  { color: var(--muted); }
+  </style>
+</head>
+<body>
+
+<!-- ══ Header ═══════════════════════════════════════════════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <span class="logo">🛡️</span>
+    <div>
+      <h1>Reliability Guardrails</h1>
+      <div class="subtitle">SLO-Driven, Cost-Aware Deployment Gate</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="refresh-info">
+      <span class="dot" id="liveDot"></span>
+      <span id="lastUpdated">Loading…</span>
+    </span>
+    <button class="btn btn-ghost" onclick="toggleAutoRefresh()" id="autoRefreshBtn">⏸ Pause</button>
+    <button class="btn btn-primary" onclick="runGate()" id="runGateBtn">▶ Run Deployment Gate</button>
+  </div>
+</header>
+
+<!-- ══ Main ══════════════════════════════════════════════════════════════ -->
+<main class="container">
+
+  <!-- Decision banner -->
+  <div class="card decision-card ALLOW" id="decisionCard" style="margin-bottom:1rem;">
+    <div class="loading-overlay"><span class="spin">⟳</span> Loading signals…</div>
+  </div>
+
+  <!-- Signals grid -->
+  <div class="grid-top" id="signalsGrid">
+    <!-- SLO Card -->
+    <div class="card" id="sloCard">
+      <h2>SLO Health</h2>
+      <div class="loading-overlay"><span class="spin">⟳</span></div>
+    </div>
+
+    <!-- Cost Card -->
+    <div class="card" id="costCard">
+      <h2>FinOps Signals</h2>
+      <div class="loading-overlay"><span class="spin">⟳</span></div>
+    </div>
+
+    <!-- Policies Card -->
+    <div class="card" id="policiesCard">
+      <h2>Policy Evaluation</h2>
+      <div class="loading-overlay"><span class="spin">⟳</span></div>
+    </div>
+  </div>
+
+  <!-- Bottom grid -->
+  <div class="grid-bottom">
+    <!-- Audit log -->
+    <div class="card" id="auditCard">
+      <h2>Today's Audit Log</h2>
+      <p class="section-meta">Decisions recorded in this session (<span id="auditCount">0</span>)</p>
+      <div class="audit-wrap" id="auditTable">
+        <div class="audit-empty">No decisions recorded yet. Click "Run Deployment Gate" to log one.</div>
+      </div>
+    </div>
+
+    <!-- Incident explanation -->
+    <div class="card" id="explainCard">
+      <h2>Incident Explainer</h2>
+      <p class="section-meta">AI-generated narrative of the current system state</p>
+      <div id="explanationText" class="explanation-text" style="color: var(--muted); font-family: var(--font); text-align:center; padding:2rem;">
+        Loading explanation…
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ══ Gate modal ════════════════════════════════════════════════════════ -->
+<div id="gateModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center;">
+  <div class="card" style="max-width:600px; width:90%; max-height:80vh; overflow-y:auto;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+      <h3>Deployment Gate Result</h3>
+      <button class="btn btn-ghost" onclick="closeModal()">✕ Close</button>
+    </div>
+    <div id="gateResult"></div>
+  </div>
+</div>
+
+<script>
+{% raw %}
+// ══ State ══════════════════════════════════════════════════════════════════
+
+let autoRefresh = true;
+let refreshInterval = null;
+const REFRESH_MS = 30_000;
+
+// ══ Utilities ══════════════════════════════════════════════════════════════
+
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString();
+}
+
+function fmtUSD(n) {
+  return '$' + (+(n || 0)).toFixed(2);
+}
+
+function budgetColor(pct) {
+  if (pct < 10) return 'var(--block)';
+  if (pct < 30) return 'var(--delay)';
+  if (pct < 60) return 'var(--warn)';
+  return 'var(--allow)';
+}
+
+function actionBadgeClass(action) {
+  return { ALLOW:'badge-green', WARN:'badge-yellow', DELAY:'badge-orange', BLOCK:'badge-red' }[action] || 'badge-blue';
+}
+
+function actionIcon(action) {
+  return { ALLOW:'✅', WARN:'⚠️', DELAY:'⏳', BLOCK:'🚫' }[action] || '?';
+}
+
+function burnBadgeClass(rate) {
+  return { low:'badge-green', medium:'badge-yellow', high:'badge-orange', critical:'badge-red' }[rate] || 'badge-blue';
+}
+
+function wowClass(pct) {
+  if (pct > 10) return 'wow-positive';
+  if (pct < -5) return 'wow-negative';
+  return 'wow-neutral';
+}
+
+function setDot(loading) {
+  const dot = document.getElementById('liveDot');
+  dot.className = 'dot' + (loading ? ' loading' : '');
+}
+
+// ══ Fetch all signals ══════════════════════════════════════════════════════
+
+async function fetchAll() {
+  setDot(true);
+  document.getElementById('lastUpdated').textContent = 'Refreshing…';
+  try {
+    const resp = await fetch('/api/all');
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error);
+    renderAll(json.data);
+    const now = new Date().toLocaleTimeString();
+    document.getElementById('lastUpdated').textContent = 'Updated ' + now;
+  } catch (e) {
+    document.getElementById('lastUpdated').textContent = 'Error: ' + e.message;
+    console.error(e);
+  } finally {
+    setDot(false);
+  }
+}
+
+async function fetchAudit() {
+  try {
+    const resp = await fetch('/api/audit');
+    const json = await resp.json();
+    if (json.ok) renderAudit(json.data);
+  } catch (e) { /* silent */ }
+}
+
+// ══ Render functions ═══════════════════════════════════════════════════════
+
+function renderAll(data) {
+  renderDecision(data.decision, data.slo, data.cost);
+  renderSLO(data.slo);
+  renderCost(data.cost);
+  renderPolicies(data.decision);
+  renderExplanation(data.explanation);
+}
+
+function renderDecision(dec, slo, cost) {
+  const card = document.getElementById('decisionCard');
+  card.className = 'card decision-card ' + dec.action;
+
+  const delayStr = dec.delay_minutes > 0
+    ? `<span class="tag">⏱ ${dec.delay_minutes} min delay</span>`
+    : '';
+
+  card.innerHTML = `
+    <div class="decision-badge">
+      <div class="decision-icon">${actionIcon(dec.action)}</div>
+      <div>
+        <div class="decision-action ${dec.action}">${dec.action}</div>
+        <div style="font-size:0.75rem; color:var(--muted); font-family:var(--mono);">${dec.policy_id}</div>
+      </div>
+    </div>
+    <div class="decision-meta">
+      <div class="decision-policy">[${dec.policy_id}] ${dec.policy_name}</div>
+      <div class="decision-reason">${dec.reason}</div>
+      <div class="decision-remediation">${dec.remediation} ${delayStr}</div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0.5rem; align-items:flex-end; min-width:160px;">
+      <div>
+        <span class="badge ${budgetToClass(slo.error_budget_pct)}">
+          Budget: ${(+(slo.error_budget_pct || 0)).toFixed(1)}%
+        </span>
+      </div>
+      <div>
+        <span class="badge ${burnBadgeClass(slo.burn_rate)}">
+          Burn: ${slo.burn_rate.toUpperCase()}
+        </span>
+      </div>
+      <div>
+        <span class="badge ${cost.spike_detected ? 'badge-red' : 'badge-green'}">
+          Cost: ${cost.spike_detected ? '⚠ Spike' : '✓ Stable'}
+        </span>
+      </div>
+    </div>
+  `;
+}
+
+function budgetToClass(pct) {
+  if (pct < 10) return 'badge-red';
+  if (pct < 30) return 'badge-orange';
+  if (pct < 60) return 'badge-yellow';
+  return 'badge-green';
+}
+
+function renderSLO(slo) {
+  const card = document.getElementById('sloCard');
+  const rates = (slo.details && slo.details.hourly_burn_rates) || [];
+  const isHealthy = slo.healthy;
+
+  card.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+      <h2 style="margin:0;">SLO Health</h2>
+      <span class="badge ${isHealthy ? 'badge-green' : 'badge-red'}">${isHealthy ? '✓ Healthy' : '✗ Degraded'}</span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Availability</span>
+      <span class="stat-value" style="color:${slo.availability_compliant ? 'var(--allow)' : 'var(--block)'}">
+        ${(+(slo.availability_pct || 0)).toFixed(4)}%
+        <span style="margin-left:0.4rem; font-size:0.75rem; color:var(--muted)">target ${slo.details.availability_target_pct}%</span>
+      </span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Error Budget</span>
+      <div class="budget-bar-wrap" style="flex:1; margin-left:1rem;">
+        <div class="budget-bar-track">
+          <div class="budget-bar-fill" style="width:${slo.error_budget_pct}%; background:${budgetColor(slo.error_budget_pct)};"></div>
+        </div>
+        <span class="budget-pct" style="color:${budgetColor(slo.error_budget_pct)}">${(+(slo.error_budget_pct||0)).toFixed(1)}%</span>
+      </div>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Burn Rate</span>
+      <span class="stat-value">
+        <span class="badge ${burnBadgeClass(slo.burn_rate)}">${slo.burn_rate.toUpperCase()}</span>
+        <span style="margin-left:0.5rem; color:var(--muted);">×${slo.burn_rate_value}</span>
+      </span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Latency p95</span>
+      <span class="stat-value" style="color:${slo.latency_compliant ? 'var(--allow)' : 'var(--block)'}">
+        ${slo.latency_p95_ms} ms
+        <span style="font-size:0.75rem; color:var(--muted); margin-left:0.4rem">limit ${slo.details.latency_target_p95_ms} ms</span>
+      </span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Latency p99</span>
+      <span class="stat-value">${slo.latency_p99_ms} ms</span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">Failed requests</span>
+      <span class="stat-value">${(+(slo.details.failed_requests||0)).toLocaleString()} / ${(+(slo.details.total_requests||0)).toLocaleString()}</span>
+    </div>
+
+    ${rates.length ? `
+    <div class="sparkline-wrap">
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:0.4rem;">Hourly burn rate (last 24h)</div>
+      <canvas id="burnChart"></canvas>
+    </div>` : ''}
+  `;
+
+  if (rates.length) drawSparkline('burnChart', rates);
+}
+
+function renderCost(cost) {
+  const card = document.getElementById('costCard');
+  const daily = cost.daily_costs || [];
+  const amounts = daily.map(d => d.cost);
+  const maxAmt = Math.max(...amounts, 1);
+  const avgWk = cost.current_week_avg_usd;
+  const prevWk = cost.previous_week_avg_usd;
+  const wowPct = cost.wow_change_pct;
+
+  const barsHtml = amounts.map((a, i) => {
+    const heightPct = (a / maxAmt * 100).toFixed(1);
+    const isSpike = wowPct >= 20 && i >= amounts.length - 7;
+    return `<div class="cost-bar ${isSpike ? 'spike' : ''}" style="height:${heightPct}%" title="${daily[i]?.date}: $${a.toFixed(2)}"></div>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+      <h2 style="margin:0;">FinOps Signals</h2>
+      <span class="badge ${cost.spike_detected ? 'badge-red' : 'badge-green'}">${cost.spike_detected ? '⚠ Spike' : '✓ Stable'}</span>
+    </div>
+
+    <div class="stat-row">
+      <span class="stat-label">WoW change</span>
+      <span class="stat-value ${wowClass(wowPct)}">${wowPct > 0 ? '+' : ''}${wowPct.toFixed(2)}%</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Trend</span>
+      <span class="stat-value">
+        <span class="badge ${{stable:'badge-green',rising:'badge-yellow',spiking:'badge-red',falling:'badge-blue'}[cost.trend] || 'badge-blue'}">${cost.trend.toUpperCase()}</span>
+      </span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Prev week avg</span>
+      <span class="stat-value">${fmtUSD(prevWk)}/day</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Curr week avg</span>
+      <span class="stat-value" style="color:${wowPct > 20 ? 'var(--block)' : 'var(--text)'}">${fmtUSD(avgWk)}/day</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">MTD spend</span>
+      <span class="stat-value">${fmtUSD(cost.mtd_spend_usd)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Monthly budget</span>
+      <span class="stat-value">${fmtUSD(cost.budget_usd)}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Budget used</span>
+      <div class="budget-bar-wrap" style="flex:1; margin-left:1rem;">
+        <div class="budget-bar-track">
+          <div class="budget-bar-fill" style="width:${Math.min(cost.budget_utilisation_pct,100)}%; background:${cost.budget_utilisation_pct>90?'var(--block)':cost.budget_utilisation_pct>70?'var(--warn)':'var(--blue)'};"></div>
+        </div>
+        <span class="budget-pct">${cost.budget_utilisation_pct.toFixed(1)}%</span>
+      </div>
+    </div>
+
+    ${amounts.length ? `
+    <div class="sparkline-wrap">
+      <div style="font-size:0.72rem; color:var(--muted); margin-bottom:0.4rem;">Daily cost — last 30 days</div>
+      <div class="cost-bars">${barsHtml}</div>
+    </div>` : ''}
+  `;
+}
+
+function renderPolicies(dec) {
+  const card = document.getElementById('policiesCard');
+  const policies = dec.evaluated_policies || [];
+
+  const rows = policies.map(p => `
+    <div class="policy-item ${p.matched ? 'matched' : ''}">
+      <span class="tag" style="min-width:50px; text-align:center">${p.id}</span>
+      <span class="policy-item-name">${p.name}</span>
+      <span class="badge ${actionBadgeClass(p.action)}">${p.action}</span>
+      ${p.matched ? '<span style="color:var(--blue); font-size:0.9rem;">← matched</span>' : ''}
+    </div>
+  `).join('');
+
+  card.innerHTML = `
+    <h2>Policy Evaluation</h2>
+    <p class="section-meta">Matched policy: <strong style="color:var(--blue)">${dec.policy_id}</strong></p>
+    <div class="policy-list">${rows || '<p style="color:var(--muted)">No policies loaded.</p>'}</div>
+  `;
+}
+
+function renderExplanation(text) {
+  document.getElementById('explanationText').textContent = text || 'No explanation available.';
+  document.getElementById('explanationText').style.fontFamily = 'var(--mono)';
+  document.getElementById('explanationText').style.color = 'var(--text)';
+  document.getElementById('explanationText').style.textAlign = 'left';
+  document.getElementById('explanationText').style.padding = '';
+}
+
+function renderAudit(records) {
+  const count = records.length;
+  document.getElementById('auditCount').textContent = count;
+
+  if (!count) return;
+
+  const rows = [...records].reverse().slice(0, 20).map(r => {
+    const ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '—';
+    const actionClass = actionBadgeClass(r.action);
+    return `
+      <tr>
+        <td>${ts}</td>
+        <td><span class="badge ${actionClass}">${r.action}</span></td>
+        <td>${r.policy_id || '—'}</td>
+        <td style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted)">${r.reason || '—'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('auditTable').innerHTML = `
+    <table>
+      <thead><tr><th>Time</th><th>Decision</th><th>Policy</th><th>Reason</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ══ Sparkline canvas ═══════════════════════════════════════════════════════
+
+function drawSparkline(canvasId, data) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth;
+  const h = 80;
+  canvas.width  = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  const step = w / (data.length - 1);
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(96,165,250,0.3)');
+  grad.addColorStop(1, 'rgba(96,165,250,0.0)');
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = h - ((v - min) / range) * (h - 8) - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+
+  // Fill path
+  ctx.lineTo((data.length - 1) * step, h);
+  ctx.lineTo(0, h);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * step;
+    const y = h - ((v - min) / range) * (h - 8) - 4;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = 'rgba(96,165,250,0.9)';
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Threshold line at 5x (high burn)
+  const highY = h - ((5 - min) / range) * (h - 8) - 4;
+  if (highY > 0 && highY < h) {
+    ctx.beginPath();
+    ctx.setLineDash([4, 4]);
+    ctx.moveTo(0, highY);
+    ctx.lineTo(w, highY);
+    ctx.strokeStyle = 'rgba(251,146,60,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(251,146,60,0.7)';
+    ctx.font = '9px monospace';
+    ctx.fillText('HIGH', w - 28, highY - 3);
+  }
+}
+
+// ══ Gate interaction ════════════════════════════════════════════════════════
+
+async function runGate() {
+  const btn = document.getElementById('runGateBtn');
+  btn.disabled = true;
+  btn.textContent = '⟳ Running…';
+
+  try {
+    const resp = await fetch('/api/simulate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error);
+
+    const d = json.data;
+    const modal = document.getElementById('gateModal');
+    const result = document.getElementById('gateResult');
+
+    result.innerHTML = `
+      <div style="margin-bottom:1rem;">
+        <span class="decision-icon" style="font-size:2rem">${actionIcon(d.action)}</span>
+        <span class="decision-action ${d.action}" style="font-size:1.8rem; margin-left:0.5rem">${d.action}</span>
+      </div>
+      <div class="stat-row"><span class="stat-label">Policy</span><span class="stat-value">[${d.policy_id}] ${d.policy_name}</span></div>
+      <div class="stat-row"><span class="stat-label">Reason</span><span class="stat-value" style="color:var(--muted)">${d.reason}</span></div>
+      ${d.delay_minutes ? `<div class="stat-row"><span class="stat-label">Delay</span><span class="stat-value">${d.delay_minutes} minutes</span></div>` : ''}
+      <hr class="divider" />
+      <div style="font-size:0.8rem; color:var(--muted); margin-bottom:0.5rem">Incident Explanation:</div>
+      <div class="explanation-text" style="max-height:280px">${d.explanation || '—'}</div>
+      <hr class="divider" />
+      <div style="font-size:0.75rem; color:var(--muted)">✓ Decision recorded to audit log</div>
+    `;
+    modal.style.display = 'flex';
+
+    // Refresh dashboard
+    await fetchAll();
+    await fetchAudit();
+  } catch (e) {
+    alert('Error running gate: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶ Run Deployment Gate';
+  }
+}
+
+function closeModal() {
+  document.getElementById('gateModal').style.display = 'none';
+}
+
+document.getElementById('gateModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ══ Auto-refresh ════════════════════════════════════════════════════════════
+
+function startRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(async () => {
+    await fetchAll();
+    await fetchAudit();
+  }, REFRESH_MS);
+}
+
+function toggleAutoRefresh() {
+  autoRefresh = !autoRefresh;
+  const btn = document.getElementById('autoRefreshBtn');
+  if (autoRefresh) {
+    btn.textContent = '⏸ Pause';
+    startRefresh();
+  } else {
+    btn.textContent = '▶ Resume';
+    clearInterval(refreshInterval);
+  }
+}
+
+// ══ Boot ════════════════════════════════════════════════════════════════════
+
+(async function init() {
+  await fetchAll();
+  await fetchAudit();
+  startRefresh();
+})();
+{% endraw %}
+</script>
+</body>
+</html>

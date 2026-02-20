@@ -1,0 +1,97 @@
+version: "1.0"
+description: "Deployment guardrail policies — evaluated top-to-bottom, first match wins"
+
+policies:
+  - id: P001
+    name: "Critical error budget exhaustion"
+    priority: 1
+    action: BLOCK
+    conditions:
+      error_budget_pct:
+        operator: lt
+        value: 10
+    reason: "Error budget critically exhausted — service stability is at severe risk"
+    remediation: "Freeze all deployments. Investigate and fix error sources immediately."
+
+  - id: P002
+    name: "Low error budget with high burn rate"
+    priority: 2
+    action: BLOCK
+    conditions:
+      error_budget_pct:
+        operator: lt
+        value: 20
+      burn_rate:
+        operator: in
+        value: ["high", "critical"]
+    reason: "Error budget below 20% with high burn rate — imminent SLO breach"
+    remediation: "Hold all deployments. Reduce traffic or roll back recent changes."
+
+  - id: P003
+    name: "Cost spike during reliability incident"
+    priority: 3
+    action: BLOCK
+    conditions:
+      cost_spike_pct:
+        operator: gte
+        value: 30
+      burn_rate:
+        operator: in
+        value: ["high", "critical"]
+    reason: "Cloud costs spiking while reliability is degraded — compound risk"
+    remediation: "Investigate cost anomaly and service errors before deploying."
+
+  - id: P004
+    name: "High burn rate"
+    priority: 4
+    action: DELAY
+    conditions:
+      burn_rate:
+        operator: in
+        value: ["high", "critical"]
+    reason: "Error budget burning at high rate — deployment risk is elevated"
+    remediation: "Wait for burn rate to normalize. Check recent error trends."
+    delay_minutes: 30
+
+  - id: P005
+    name: "Moderate error budget consumed"
+    priority: 5
+    action: DELAY
+    conditions:
+      error_budget_pct:
+        operator: lt
+        value: 30
+    reason: "Less than 30% error budget remaining"
+    remediation: "Proceed with caution. Consider a canary deployment."
+    delay_minutes: 15
+
+  - id: P006
+    name: "Significant cost spike"
+    priority: 6
+    action: WARN
+    conditions:
+      cost_spike_pct:
+        operator: gte
+        value: 20
+    reason: "Cloud costs increased significantly week-over-week"
+    remediation: "Review resource usage and scaling events before proceeding."
+
+  - id: P007
+    name: "Latency SLO breach"
+    priority: 7
+    action: DELAY
+    conditions:
+      latency_compliant:
+        operator: eq
+        value: false
+    reason: "p95 latency is above target threshold"
+    remediation: "Investigate latency regression before deploying new changes."
+    delay_minutes: 20
+
+  - id: P008
+    name: "All signals healthy"
+    priority: 99
+    action: ALLOW
+    conditions: {}
+    reason: "All reliability and cost signals within acceptable thresholds"
+    remediation: "No action required."

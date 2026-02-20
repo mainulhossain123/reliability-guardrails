@@ -1,0 +1,20 @@
+{
+  "service": "checkout-api",
+  "window_days": 30,
+  "collected_at": "2026-02-20T00:00:00Z",
+  "total_requests": 2000000,
+  "failed_requests": 800,
+  "latency_percentiles": {
+    "p50_ms": 210,
+    "p95_ms": 460,
+    "p99_ms": 820
+  },
+  "hourly_burn_rate": [
+    1.5, 2.0, 2.8, 3.5, 4.1, 3.8,
+    3.2, 2.9, 2.5, 2.2, 2.0, 1.8,
+    1.7, 1.9, 2.1, 2.4, 2.2, 2.0,
+    1.8, 1.6, 1.5, 1.4, 1.5, 1.6
+  ],
+  "error_types": {"5xx": 600, "4xx": 150, "timeouts": 50},
+  "regions": ["ap-southeast-1"]
+}

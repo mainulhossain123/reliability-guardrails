@@ -1,0 +1,39 @@
+{
+  "service": "checkout-api",
+  "environment": "production",
+  "region": "ap-southeast-1",
+  "resources": [
+    {
+      "id": "i-0a1b2c3d4e5f6a7b8",
+      "type": "ec2",
+      "instance_type": "t3.large",
+      "count": 4,
+      "monthly_cost_usd": 450.00,
+      "tags": {"team": "platform", "env": "prod"}
+    },
+    {
+      "id": "db-checkout-prod-01",
+      "type": "rds",
+      "instance_type": "db.r6g.large",
+      "count": 2,
+      "monthly_cost_usd": 380.00,
+      "tags": {"team": "platform", "env": "prod"}
+    },
+    {
+      "id": "alb-checkout-prod",
+      "type": "alb",
+      "count": 1,
+      "monthly_cost_usd": 85.00,
+      "tags": {"team": "platform", "env": "prod"}
+    },
+    {
+      "id": "s3-checkout-logs",
+      "type": "s3",
+      "storage_gb": 2400,
+      "monthly_cost_usd": 58.00,
+      "tags": {"team": "platform", "env": "prod"}
+    }
+  ],
+  "total_monthly_cost_usd": 973.00,
+  "last_updated": "2026-02-20T00:00:00Z"
+}

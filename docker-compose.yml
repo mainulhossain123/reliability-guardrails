@@ -1,0 +1,93 @@
+services:
+
+  # ── Sample application ───────────────────────────────────────────────────
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ERROR_RATE: "0.02"
+      APP_SLOW_RATE:  "0.10"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ── SLO engine (one-shot report) ─────────────────────────────────────────
+  slo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "slo.slo_engine"]
+    volumes:
+      - .:/app
+    environment:
+      LOG_LEVEL: "INFO"
+
+  # ── Cost collector (one-shot report) ─────────────────────────────────────
+  cost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "cost.cost_collector"]
+    volumes:
+      - .:/app
+
+  # ── Decision engine (one-shot gate) ──────────────────────────────────────
+  decision:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "decision.decision_engine"]
+    volumes:
+      - .:/app
+    environment:
+      LOG_LEVEL: "INFO"
+
+  # ── AI explainer (one-shot narrative) ────────────────────────────────────
+  explainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "ai.incident_explainer"]
+    volumes:
+      - .:/app
+    environment:
+      EXPLAINER_BACKEND: "rule_based"
+
+  # ── Web Dashboard ────────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "dashboard.app"]
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+    environment:
+      PYTHONPATH: "/app"
+      DASHBOARD_PORT: "5000"
+      LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/all"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ── Test runner ───────────────────────────────────────────────────────────
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["-m", "pytest", "tests/", "-v", "--tb=short", "--no-header"]
+    volumes:
+      - .:/app
+    environment:
+      PYTHONPATH: "/app"
+      LOG_LEVEL: "WARNING"

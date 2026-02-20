@@ -1,0 +1,24 @@
+slos:
+  availability:
+    target: 99.9           # Minimum availability %
+    window_days: 30        # Rolling evaluation window
+    description: "99.9% of requests must succeed"
+
+  latency:
+    p95_threshold_ms: 500  # 95th percentile must be under 500 ms
+    p99_threshold_ms: 1000 # 99th percentile must be under 1000 ms
+    window_days: 30
+    description: "p95 latency must be below 500ms"
+
+error_budget:
+  alert_thresholds:
+    warning_pct: 50        # Warn when 50% of budget consumed
+    critical_pct: 80       # Critical when 80% of budget consumed
+    block_pct: 90          # Block deploys when 90% consumed (10% remaining)
+
+burn_rate:
+  thresholds:
+    low: 1.0               # 1x normal consumption rate
+    medium: 2.0            # 2x — investigate
+    high: 5.0              # 5x — delay deployments
+    critical: 10.0         # 10x — block immediately
