@@ -139,11 +139,14 @@ class SLOEngine:
         high_thr     = burn_cfg.get("high",      5.0)
         medium_thr   = burn_cfg.get("medium",     2.0)
 
-        if recent_burn >= critical_thr or error_budget_pct < 10:
+        # Burn rate label reflects only the actual consumption speed.
+        # Budget severity is evaluated independently by policy conditions —
+        # conflating the two causes the label to contradict the numeric value.
+        if recent_burn >= critical_thr:
             burn_label = "critical"
-        elif recent_burn >= high_thr or error_budget_pct < 20:
+        elif recent_burn >= high_thr:
             burn_label = "high"
-        elif recent_burn >= medium_thr or error_budget_pct < 50:
+        elif recent_burn >= medium_thr:
             burn_label = "medium"
         else:
             burn_label = "low"

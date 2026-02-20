@@ -106,6 +106,34 @@ class TestSLOEngineBudgetBar:
         assert bar.count("█") == expected_filled
 
 
+class TestSLOEngineBurnRateIsolation:
+    """Burn rate label must reflect only actual consumption speed.
+
+    Regression tests for the bug where ``error_budget_pct < N`` inflated the
+    burn rate label even when the recent hourly rate was below the High
+    threshold (5×).  This caused P002 to evaluate as BLOCK when DELAY was
+    the correct decision.
+    """
+
+    def test_low_budget_low_burn_is_not_escalated(self, slo_config_path, recovering_metrics_path):
+        """Budget ≈19 %, recent burn ≈0.87× → label must be 'low', not 'high'."""
+        result = SLOEngine(slo_config_path, recovering_metrics_path).evaluate()
+        assert result.burn_rate == "low", (
+            f"Expected 'low' but got '{result.burn_rate}' "
+            f"(value={result.burn_rate_value}×, budget={result.error_budget_pct:.1f}%)"
+        )
+
+    def test_low_budget_low_burn_value_matches_label(self, slo_config_path, recovering_metrics_path):
+        """burn_rate_value and burn_rate label must be consistent."""
+        result = SLOEngine(slo_config_path, recovering_metrics_path).evaluate()
+        assert result.burn_rate_value < 5.0, "Low label implies value < high threshold (5×)"
+
+    def test_critical_burn_rate_unchanged(self, slo_config_path, critical_metrics_path):
+        """12× hourly burn must still be labelled 'critical' after the fix."""
+        result = SLOEngine(slo_config_path, critical_metrics_path).evaluate()
+        assert result.burn_rate == "critical"
+
+
 class TestSLOEngineDefaultPaths:
     """Integration test — uses the real config/data files in the repo."""
 

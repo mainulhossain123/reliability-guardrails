@@ -181,8 +181,21 @@ CONTEXT & NEXT STEPS
                 )
             if slo.burn_rate in {"high", "critical"}:
                 issues.append(
-                    f"Error budget is burning at {slo.burn_rate_value:.1f}× the normal rate. "
-                    "At this rate the remaining budget will be exhausted quickly."
+                    f"Error budget is burning at {slo.burn_rate_value:.1f}× the normal rate "
+                    f"({slo.burn_rate.upper()}). At this rate the remaining budget will be "
+                    "exhausted quickly — delay or halt all deployments."
+                )
+            elif slo.burn_rate == "medium" and slo.error_budget_pct < 30:
+                issues.append(
+                    f"Error budget is at {slo.error_budget_pct:.1f}% with a moderate burn rate "
+                    f"({slo.burn_rate_value:.1f}×). Monitor closely; further degradation will "
+                    "trigger stricter policies."
+                )
+            elif slo.burn_rate == "low" and slo.error_budget_pct < 30:
+                issues.append(
+                    f"Error budget is low ({slo.error_budget_pct:.1f}% remaining) but burn rate "
+                    f"has decelerated to {slo.burn_rate_value:.1f}×. The service appears to be "
+                    "recovering — proceed with a staged rollout and close monitoring."
                 )
             if not slo.latency_compliant:
                 issues.append(

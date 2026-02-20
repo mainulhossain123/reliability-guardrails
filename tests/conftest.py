@@ -80,6 +80,31 @@ def critical_metrics_path(tmp_path: Path) -> Path:
     return p
 
 
+@pytest.fixture()
+def recovering_metrics_path(tmp_path: Path) -> Path:
+    """Reproduces the CI-failure scenario: budget ~19 %, recent burn <1×.
+
+    The service burned heavily mid-day (peaked at ~3×), consuming the error
+    budget, but has since recovered to sub-1×.  The burn rate label should be
+    'low' (not inflated to 'high' because of the low budget), and the gate
+    decision should be DELAY via P005, NOT BLOCK via P002.
+    """
+    data = _metrics(
+        total=2_592_000,
+        failed=2_100,  # 99.9190 % availability → ~19 % budget remaining
+        p95_ms=480,
+        hourly_rates=[
+            0.8, 0.9, 1.0, 1.1, 0.9, 0.8,
+            1.2, 1.4, 1.8, 2.4, 3.1, 2.8,
+            2.5, 2.1, 1.9, 1.7, 1.5, 1.4,
+            1.2, 1.1, 1.0, 0.9, 0.8, 0.9,
+        ],
+    )
+    p = tmp_path / "metrics_recovering.json"
+    p.write_text(json.dumps(data))
+    return p
+
+
 # ── Cost fixtures ─────────────────────────────────────────────────────────────
 
 def _cost_data(base_cost: float = 45.0, spike: bool = False) -> dict:
